@@ -1,5 +1,5 @@
 {
-  "name": "rosetta-shell",
+  "name": "@flashesofbrilliance/rosetta-shell",
   "version": "0.1.0",
   "description": "Lossless shell/environment translation (bash 3.2 <-> zsh <-> POSIX). Run one script natively in every shell locale, and gate portability in CI.",
   "bin": {
