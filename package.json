@@ -1,0 +1,51 @@
+{
+  "name": "rosetta-shell",
+  "version": "0.1.0",
+  "description": "Lossless shell/environment translation (bash 3.2 <-> zsh <-> POSIX). Run one script natively in every shell locale, and gate portability in CI.",
+  "bin": {
+    "rosetta": "bin/rosetta"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "conformance/",
+    "examples/",
+    ".github/workflows/portability.yml",
+    "SEED.md",
+    "CONFORMANCE.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "sh test.sh"
+  },
+  "keywords": [
+    "shell",
+    "bash",
+    "zsh",
+    "posix",
+    "dash",
+    "ksh",
+    "portability",
+    "compatibility",
+    "associative-array",
+    "bash-3.2",
+    "polyfill",
+    "ci",
+    "conformance",
+    "cross-shell"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flashesofbrilliance/rosetta-shell.git"
+  },
+  "homepage": "https://github.com/flashesofbrilliance/rosetta-shell#readme",
+  "engines": {
+    "node": "*"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ]
+}
