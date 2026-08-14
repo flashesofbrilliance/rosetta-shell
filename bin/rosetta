@@ -1,0 +1,117 @@
+#!/usr/bin/env sh
+# rosetta — CLI for the rosetta-shell toolkit.
+#
+#   rosetta doctor              localize this environment (what shell + gaps)
+#   rosetta lint FILE...        flag non-portable constructs + suggest the shim
+#   rosetta selftest            run the conformance suite across every shell here
+#   rosetta version
+#
+# The doctor "localizes" your environment the way i18n localizes a UI: it reports
+# which shell locale you're in and which native features are missing, so a script
+# knows which rosetta shims it must lean on.
+
+set -eu
+
+# Resolve our own dir so we can find lib/ and conformance/ regardless of cwd.
+_self=$0
+case "$_self" in */*) _dir=${_self%/*} ;; *) _dir=. ;; esac
+ROSETTA_ROOT=$(cd "$_dir/.." && pwd)
+ROSETTA_LIB="$ROSETTA_ROOT/lib"
+export ROSETTA_LIB
+# shellcheck source=/dev/null
+. "$ROSETTA_LIB/rosetta.sh"
+
+_usage() {
+  cat <<'EOF'
+rosetta — lossless shell/environment translation (bash 3.2 <-> zsh <-> POSIX)
+
+USAGE
+  rosetta doctor              Report this shell locale + missing native features.
+  rosetta lint FILE...        Scan scripts for non-portable constructs; suggest shims.
+  rosetta selftest            Run the conformance suite across all shells present.
+  rosetta version             Print version + detected locale.
+
+Source lib/rosetta.sh in your own scripts to get the portable map + shims.
+EOF
+}
+
+cmd_doctor() {
+  rosetta_version
+  printf '\n'
+  printf 'Detected locale : %s %s\n' "$ROSETTA_SHELL" "$ROSETTA_SHELL_VERSION"
+  printf 'Native features present in THIS locale:\n'
+  for cap in assoc upper_lower_expand arrays; do
+    if rosetta_have "$cap"; then
+      printf '  [+] %-20s native\n' "$cap"
+    else
+      printf '  [-] %-20s MISSING -> use rosetta shim\n' "$cap"
+    fi
+  done
+  printf '\nShim map (what to call instead of the native construct):\n'
+  printf '  declare -A / typeset -A   ->  rosetta_map_set/get/has/keys/del\n'
+  printf '  ${v,,} / ${v^^}           ->  rosetta_lower / rosetta_upper\n'
+  printf '  echo -e                   ->  rosetta_eprint\n'
+  printf '  IFS-split into array      ->  rosetta_split DELIM STR CALLBACK\n'
+  printf '\nOther shells available on this host:\n'
+  for s in /bin/bash bash zsh /bin/dash /bin/sh ksh; do
+    if command -v "$s" >/dev/null 2>&1; then
+      _v=$("$s" -c 'echo "${BASH_VERSION:-${ZSH_VERSION:-posix}}"' 2>/dev/null || echo '?')
+      printf '  %-12s %s\n' "$s" "$_v"
+    fi
+  done
+}
+
+# cmd_lint: greps for known non-portable constructs, prints file:line + fix.
+# Advisory only (rosetta-by-reference): it never rewrites your script. The map
+# of construct->shim is explicit and inspectable, like the public rosetta stone.
+cmd_lint() {
+  [ "$#" -gt 0 ] || { echo "lint: need at least one FILE" >&2; return 2; }
+  _findings=0
+  for f in "$@"; do
+    [ -f "$f" ] || { printf '%s: not a file\n' "$f" >&2; continue; }
+    _ln=0
+    while IFS= read -r line || [ -n "$line" ]; do
+      _ln=$((_ln+1))
+      _report() { printf '%s:%s: %s\n     -> %s\n' "$f" "$_ln" "$1" "$2"; _findings=$((_findings+1)); }
+      case "$line" in
+        *'declare -A'*|*'typeset -A'*)
+          _report 'associative array (absent in bash 3.2 / POSIX)' 'use rosetta_map_set/get/keys' ;;
+      esac
+      case "$line" in
+        *'${'*',,}'*|*'${'*'^^}'*|*'${'*'^}'*|*'${'*',}'*)
+          _report 'bash4 case-conversion expansion (absent in bash 3.2 / zsh / POSIX)' 'use rosetta_lower / rosetta_upper' ;;
+      esac
+      case "$line" in
+        *'echo -e'*|*'echo -n '*)
+          _report 'non-portable echo flag (differs across shells)' 'use rosetta_eprint / printf' ;;
+      esac
+      case "$line" in
+        *'<(('*|*'<('*|*'>('*)
+          _report 'process substitution (bash/zsh only, not POSIX)' 'redirect through a temp file or a pipe' ;;
+      esac
+      case "$line" in
+        *'readarray'*|*'mapfile'*)
+          _report 'readarray/mapfile (bash4+ only)' 'read in a while-loop, or rosetta_split' ;;
+      esac
+      case "$line" in
+        *'&>'*)
+          _report '&> redirect (bash/zsh only, not POSIX)' 'use >file 2>&1' ;;
+      esac
+    done < "$f"
+  done
+  printf '\n%s finding(s).\n' "$_findings"
+  [ "$_findings" -eq 0 ]
+}
+
+cmd_selftest() {
+  sh "$ROSETTA_ROOT/conformance/run.sh"
+}
+
+case "${1:-}" in
+  doctor)   shift; cmd_doctor "$@" ;;
+  lint)     shift; cmd_lint "$@" ;;
+  selftest) shift; cmd_selftest "$@" ;;
+  version)  rosetta_version ;;
+  ''|-h|--help|help) _usage ;;
+  *) printf 'unknown command: %s\n\n' "$1" >&2; _usage; exit 2 ;;
+esac

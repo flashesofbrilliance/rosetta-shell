@@ -1,0 +1,18 @@
+{
+  "$comment": "Declarative conformance registry, mirroring germinate/conformance/cases.json. Each fixture's stdout MUST be byte-identical across every shell present. That identity is the losslessness proof.",
+  "version": "0.1.0",
+  "shells": {
+    "$comment": "Candidate locales. The runner uses whichever are installed; bash-3.2 and posix(dash) are the load-bearing ones.",
+    "candidates": ["/bin/bash", "bash", "zsh", "/bin/dash", "/bin/sh", "ksh"]
+  },
+  "fixtures": [
+    {
+      "file": "fixtures/map_basic.sh",
+      "asserts": "lossless assoc-array over keys/values containing spaces, tabs, quotes, and shell metacharacters; insertion-order keys; delete; case shims; split"
+    },
+    {
+      "file": "fixtures/edge_values.sh",
+      "asserts": "empty values, values with newlines, unicode, leading/trailing whitespace survive round-trip"
+    }
+  ]
+}

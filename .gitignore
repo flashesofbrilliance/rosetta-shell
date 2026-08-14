@@ -1,0 +1,3 @@
+# Private priors / tenant rosetta tables never belong in this open repo (ADR-053).
+rosetta.private.*
+*.local.sh
