@@ -1,0 +1,46 @@
+name: shell-portability
+
+# The portability gate. Installs the shells a script is likely to meet in the
+# wild (bash 3.2 is Apple's frozen /bin/bash; dash is Debian/Ubuntu's /bin/sh)
+# and proves the repo's scripts survive all of them — no guessing.
+#
+# Drop this into any repo, point CROSSRUN_TARGETS at your scripts, and a PR that
+# introduces a bashism that breaks POSIX sh fails CI instead of breaking prod.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  crossrun:
+    runs-on: ubuntu-latest
+    env:
+      # Space-separated scripts to gate. Edit for your repo.
+      CROSSRUN_TARGETS: "examples/translate-demo.sh"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shell locales (bash, zsh, dash, ksh)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh ksh dash
+          # /bin/sh on Ubuntu is already dash. bash is preinstalled.
+          echo "installed locales:"; for s in bash zsh dash ksh /bin/sh; do
+            command -v "$s" >/dev/null 2>&1 && printf '  %s\n' "$s"; done
+
+      - name: Doctor (report the locale matrix)
+        run: bin/rosetta doctor
+
+      - name: Lint scripts for non-portable constructs (advisory gate)
+        run: |
+          set -e
+          for f in $CROSSRUN_TARGETS; do bin/rosetta lint "$f"; done
+
+      - name: Crossrun — every target survives every locale (hard gate)
+        run: |
+          set -e
+          for f in $CROSSRUN_TARGETS; do bin/rosetta crossrun "$f"; done
+
+      - name: Self-conformance (the library is itself lossless here)
+        run: bin/rosetta selftest

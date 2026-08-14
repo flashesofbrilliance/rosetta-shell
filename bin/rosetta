@@ -28,11 +28,31 @@ rosetta — lossless shell/environment translation (bash 3.2 <-> zsh <-> POSIX)
 USAGE
   rosetta doctor              Report this shell locale + missing native features.
   rosetta lint FILE...        Scan scripts for non-portable constructs; suggest shims.
+  rosetta crossrun [OPTS] SCRIPT [ARGS...]
+                              Run SCRIPT under every installed shell locale and
+                              report a pass/fail matrix. The real portability gate.
+                                --identical   also require byte-identical stdout
+                                --shells "a b" override the locale set
   rosetta selftest            Run the conformance suite across all shells present.
   rosetta version             Print version + detected locale.
 
+Exit codes (crossrun/lint): 0 = clean, 1 = a locale failed / findings, 2 = usage.
 Source lib/rosetta.sh in your own scripts to get the portable map + shims.
 EOF
+}
+
+# _rosetta_shells: print the distinct installed shell locales, one per line, as
+# "path\tversiontag". Distinct-by-version so /bin/bash 3.2 and bash 5 both show.
+_rosetta_shells() {
+  _seen=''
+  for s in /bin/bash bash zsh /bin/dash /bin/sh ksh; do
+    command -v "$s" >/dev/null 2>&1 || continue
+    _v=$("$s" -c 'echo "${BASH_VERSION:-${ZSH_VERSION:-posix}}"' 2>/dev/null || echo '?')
+    _tag="$s@$_v"
+    case " $_seen " in *" $_tag "*) continue ;; esac
+    _seen="$_seen $_tag"
+    printf '%s\t%s\n' "$s" "$_v"
+  done
 }
 
 cmd_doctor() {
@@ -103,6 +123,87 @@ cmd_lint() {
   [ "$_findings" -eq 0 ]
 }
 
+# cmd_crossrun: the portability GATE. Runs a real target script under every
+# installed shell locale and reports pass/fail. This proves portability instead
+# of guessing it from regex (that's what `lint` does). CI-friendly: exits 1 if
+# any locale fails, so it drops straight into a workflow step.
+#
+#   default : a locale PASSES if the script exits 0 there.
+#   --identical : additionally require byte-identical stdout across all locales
+#                 (use for pure-output scripts; off by default since many scripts
+#                  legitimately have side effects / host-specific output).
+cmd_crossrun() {
+  # crossrun deliberately executes scripts that may fail; errexit is hostile here.
+  set +e
+  _identical=0
+  _override=''
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --identical) _identical=1; shift ;;
+      --shells) _override=$2; shift 2 ;;
+      --) shift; break ;;
+      -*) printf 'crossrun: unknown option %s\n' "$1" >&2; return 2 ;;
+      *) break ;;
+    esac
+  done
+  [ "$#" -gt 0 ] || { echo "crossrun: need a SCRIPT" >&2; return 2; }
+  _script=$1; shift
+  [ -f "$_script" ] || { printf 'crossrun: not a file: %s\n' "$_script" >&2; return 2; }
+
+  if [ -n "$_override" ]; then
+    _shells=$(for s in $_override; do
+      _v=$("$s" -c 'echo "${BASH_VERSION:-${ZSH_VERSION:-posix}}"' 2>/dev/null || echo '?')
+      printf '%s\t%s\n' "$s" "$_v"
+    done)
+  else
+    _shells=$(_rosetta_shells)
+  fi
+
+  printf 'crossrun: %s\n\n' "$_script"
+
+  # Stage 1: run under each locale, record "rc<TAB>hash<TAB>path<TAB>ver" rows to
+  # a temp file. A temp file (not a pipe) so the main shell can read verdicts
+  # back without the POSIX subshell-scoping trap.
+  _tmp=$(mktemp 2>/dev/null || printf '%s/rosetta.%s' "${TMPDIR:-/tmp}" "$$")
+  printf '%s\n' "$_shells" | while IFS='	' read -r _sh _ver; do
+    [ -n "$_sh" ] || continue
+    _out=$("$_sh" "$_script" "$@" 2>/dev/null)
+    _rc=$?
+    _hash=$(printf '%s' "$_out" | cksum | awk '{print $1}')
+    printf '%s\t%s\t%s\t%s\n' "$_rc" "$_hash" "$_sh" "$_ver"
+  done > "$_tmp"
+
+  # Stage 2: render matrix + compute verdicts in the main shell.
+  printf '  %-14s %-22s %-6s %s\n' LOCALE VERSION EXIT RESULT
+  printf '  %-14s %-22s %-6s %s\n' '------' '-------' '----' '------'
+  _fail=0
+  _ref_hash=''
+  _diverged=0
+  while IFS='	' read -r _rc _hash _sh _ver; do
+    [ -n "$_sh" ] || continue
+    if [ "$_rc" -eq 0 ]; then _r='ok'; else _r='NONZERO EXIT'; _fail=1; fi
+    if [ -z "$_ref_hash" ]; then _ref_hash=$_hash
+    elif [ "$_hash" != "$_ref_hash" ]; then _diverged=1; fi
+    printf '  %-14s %-22s %-6s %s\n' "$_sh" "$_ver" "$_rc" "$_r"
+  done < "$_tmp"
+  rm -f "$_tmp"
+
+  printf '\n'
+  if [ "$_fail" -ne 0 ]; then
+    printf 'RESULT: FAIL — at least one locale errored.\n'
+    return 1
+  fi
+  if [ "$_identical" -eq 1 ] && [ "$_diverged" -ne 0 ]; then
+    printf 'RESULT: FAIL — output diverges across locales (--identical).\n'
+    return 1
+  fi
+  if [ "$_identical" -eq 1 ]; then
+    printf 'RESULT: PASS — clean exit AND byte-identical output across all locales.\n'
+  else
+    printf 'RESULT: PASS — clean exit across all locales.\n'
+  fi
+}
+
 cmd_selftest() {
   sh "$ROSETTA_ROOT/conformance/run.sh"
 }
@@ -110,6 +211,7 @@ cmd_selftest() {
 case "${1:-}" in
   doctor)   shift; cmd_doctor "$@" ;;
   lint)     shift; cmd_lint "$@" ;;
+  crossrun) shift; cmd_crossrun "$@" ;;
   selftest) shift; cmd_selftest "$@" ;;
   version)  rosetta_version ;;
   ''|-h|--help|help) _usage ;;

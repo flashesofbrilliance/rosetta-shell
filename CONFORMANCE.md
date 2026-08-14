@@ -42,6 +42,22 @@ spaces, tabs, quotes, newlines, unicode, and shell metacharacters — see
 only byte no shell variable can hold is NUL, which is out of scope for every
 shell.
 
+## 1a. Portability of a caller's script (the gate)
+
+`rosetta crossrun SCRIPT` runs an arbitrary target script under every installed
+shell locale and reports a pass/fail matrix. This is the primary product surface:
+it *proves* a script's portability by execution rather than inferring it from
+regex (which is what `lint` does, advisory-only).
+
+- Default verdict: a locale passes iff the script exits 0 there.
+- `--identical`: additionally require byte-identical stdout across locales —
+  catches the insidious case where a shell runs the script but does the wrong
+  thing (e.g. bash 3.2 silently mishandling `declare -A` instead of erroring,
+  which the exit check alone would miss).
+
+Exit 1 on any failure, so it is a drop-in CI step
+([`.github/workflows/portability.yml`](.github/workflows/portability.yml)).
+
 ## 2. germinate seed conformance (family, Tier-A)
 
 **Claim:** [`SEED.md`](SEED.md) is a valid germinate seed and behaves correctly

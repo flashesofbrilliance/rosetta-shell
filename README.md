@@ -34,10 +34,11 @@ these. rosetta-shell is the phrasebook that makes the script speak each locale.
 
 | Part | What it is | Command / API |
 |---|---|---|
-| **rosetta.sh** | sourceable shim library — a lossless portable map + case/echo/split shims | `. lib/rosetta.sh` |
-| **doctor** | localizes your environment: which shell, which native features missing | `rosetta doctor` |
+| **crossrun** | **the gate.** Runs YOUR script under every installed shell and reports a pass/fail matrix — proves portability instead of guessing it. Exits nonzero on failure, so it drops straight into CI. | `rosetta crossrun script.sh` |
 | **lint** | scans a script for non-portable constructs, names the shim to use (advisory, never rewrites) | `rosetta lint FILE…` |
-| **conformance** | runs fixtures under every installed shell and asserts byte-identical stdout — the losslessness proof | `rosetta selftest` |
+| **doctor** | localizes your environment: which shell, which native features missing | `rosetta doctor` |
+| **rosetta.sh** | sourceable shim library — a lossless portable map + case/echo/split shims | `. lib/rosetta.sh` |
+| **conformance** | runs fixtures under every installed shell and asserts byte-identical stdout — the losslessness proof for the library itself | `rosetta selftest` |
 
 ## Quick start
 
@@ -52,7 +53,34 @@ bin/rosetta selftest
 bin/rosetta lint path/to/script.sh
 ```
 
-In your own script:
+## The gate: prove a script survives every shell
+
+`lint` guesses from regex; `crossrun` *runs* your script under every shell locale
+installed on the host and reports the truth:
+
+```
+$ rosetta crossrun deploy.sh
+  LOCALE         VERSION                EXIT   RESULT
+  /bin/bash      3.2.57(1)-release      0      ok
+  bash           5.3.9(1)-release       0      ok
+  zsh            5.9                     0      ok
+  /bin/dash      posix                  2      NONZERO EXIT   <-- POSIX sh breaks
+  ksh            posix                  0      ok
+RESULT: FAIL — at least one locale errored.        # exit 1
+```
+
+Add `--identical` to also require byte-identical stdout (catches the insidious
+case where a shell *runs* but does the wrong thing — e.g. bash 3.2 silently
+mis-handling `declare -A` instead of erroring).
+
+**As a CI gate:** [`.github/workflows/portability.yml`](.github/workflows/portability.yml)
+installs bash / zsh / dash / ksh and gates every push. A PR that introduces a
+bashism which breaks POSIX `sh` fails CI instead of breaking production. No
+adoption cost — it runs your existing scripts, no refactoring required.
+
+## The library: write portable in the first place
+
+
 
 ```sh
 . /path/to/rosetta-shell/lib/rosetta.sh
