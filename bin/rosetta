@@ -30,6 +30,15 @@ export ROSETTA_LIB
 # shellcheck source=/dev/null
 . "$ROSETTA_LIB/rosetta.sh"
 
+# Single source of truth for the version is package.json (bumped by `npm version`
+# at release). Override the library's fallback constant so the CLI never drifts
+# from the published package version.
+_pkg="$ROSETTA_ROOT/package.json"
+if [ -f "$_pkg" ]; then
+  _pv=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_pkg" | head -1)
+  [ -n "$_pv" ] && ROSETTA_VERSION="$_pv"
+fi
+
 _usage() {
   cat <<'EOF'
 rosetta — lossless shell/environment translation (bash 3.2 <-> zsh <-> POSIX)
