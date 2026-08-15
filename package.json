@@ -36,6 +36,10 @@
     "cross-shell"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flashesofbrilliance/rosetta-shell.git"
