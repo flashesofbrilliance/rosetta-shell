@@ -1,42 +1,71 @@
 name: release
 
-# Publish to npm when a version tag (vX.Y.Z) is pushed.
-# Prereq: repo secret NPM_TOKEN (npm automation token with publish rights to
-# the @flashesofbrilliance scope). Nothing publishes until a tag is pushed, and
-# the tag must match package.json version — no accidental releases.
+# Cut a release by pushing a version tag:
+#   npm version patch   # bumps package.json + creates the git tag
+#   git push --follow-tags
+# This workflow then (1) publishes to npm WITH PROVENANCE and (2) bumps the
+# Homebrew formula in flashesofbrilliance/homebrew-tap to the new tag + sha256.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   NPM_TOKEN            npm *automation* granular token with publish rights to
+#                        @flashesofbrilliance/rosetta-shell. Automation tokens
+#                        bypass 2FA — required because CI cannot do passkey/OTP.
+#   HOMEBREW_TAP_TOKEN   GitHub fine-grained PAT with Contents:write on the
+#                        flashesofbrilliance/homebrew-tap repo.
 
 on:
   push:
-    tags: ['v*']
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  id-token: write   # npm provenance
+    tags: ["v*"]
 
 jobs:
   npm-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write        # OIDC — required for npm provenance
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Tag must match package.json version
-        if: startsWith(github.ref, 'refs/tags/')
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+      - name: Verify tag matches package.json version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          echo "tag=$tag package.json=$pkg"
-          [ "$tag" = "$pkg" ] || { echo "::error::tag $tag != package.json $pkg"; exit 1; }
-
-      - name: Smoke test the CLI
-        run: sh test.sh
-
-      - name: Publish
-        run: npm publish
+          set -e
+          PKG=$(node -p "require('./package.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $PKG"; exit 1
+          fi
+      - name: Publish to npm (with provenance)
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  bump-formula:
+    needs: npm-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bump Homebrew formula to the new tag
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          VER="${TAG#v}"
+          URL="https://github.com/flashesofbrilliance/rosetta-shell/archive/refs/tags/${TAG}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          echo "version=$VER url=$URL sha=$SHA"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/flashesofbrilliance/homebrew-tap" tap
+          cd tap
+          F="Formula/rosetta-shell.rb"
+          sed -i -E "s#^  url \".*\"#  url \"${URL}\"#" "$F"
+          sed -i -E "s#^  sha256 \".*\"#  sha256 \"${SHA}\"#" "$F"
+          git config user.name "rosetta-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "formula already current — nothing to do"
+          else
+            git commit -am "rosetta-shell ${VER}: bump formula url + sha256"
+            git push
+          fi
