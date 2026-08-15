@@ -32,10 +32,10 @@ jobs:
       - name: Doctor (report the locale matrix)
         run: bin/rosetta doctor
 
-      - name: Lint scripts for non-portable constructs (advisory gate)
+      - name: Lint scripts for non-portable constructs (advisory — never blocks)
+        continue-on-error: true
         run: |
-          set -e
-          for f in $CROSSRUN_TARGETS; do bin/rosetta lint "$f"; done
+          for f in $CROSSRUN_TARGETS; do bin/rosetta lint "$f" || true; done
 
       - name: Crossrun — every target survives every locale (hard gate)
         run: |

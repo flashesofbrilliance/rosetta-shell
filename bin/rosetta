@@ -101,6 +101,11 @@ cmd_lint() {
     _ln=0
     while IFS= read -r line || [ -n "$line" ]; do
       _ln=$((_ln+1))
+      # Skip full-line comments: they explain constructs ("would need declare -A")
+      # rather than use them, so flagging them is noise. Strip leading whitespace,
+      # then ignore lines whose first character is '#'.
+      _stripped=${line#"${line%%[! 	]*}"}
+      case "$_stripped" in \#*) continue ;; esac
       _report() { printf '%s:%s: %s\n     -> %s\n' "$f" "$_ln" "$1" "$2"; _findings=$((_findings+1)); }
       case "$line" in
         *'declare -A'*|*'typeset -A'*)

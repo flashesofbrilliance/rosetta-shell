@@ -46,9 +46,14 @@ jobs:
     needs: npm-publish
     runs-on: ubuntu-latest
     steps:
+      - name: Check out the tap repo (auth handled by checkout)
+        uses: actions/checkout@v4
+        with:
+          repository: flashesofbrilliance/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
       - name: Bump Homebrew formula to the new tag
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -eu
@@ -56,7 +61,6 @@ jobs:
           URL="https://github.com/flashesofbrilliance/rosetta-shell/archive/refs/tags/${TAG}.tar.gz"
           SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
           echo "version=$VER url=$URL sha=$SHA"
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/flashesofbrilliance/homebrew-tap" tap
           cd tap
           F="Formula/rosetta-shell.rb"
           sed -i -E "s#^  url \".*\"#  url \"${URL}\"#" "$F"

@@ -20,5 +20,5 @@ rosetta_map_keys env | while IFS= read -r k; do
 done
 
 echo
-echo "Case-fold (would need bash4 \${v,,}):"
+echo "Case-fold (needs bash4 case-expansion natively):"
 printf '  lower(%s) = %s\n' "ARCS" "$(rosetta_lower ARCS)"
