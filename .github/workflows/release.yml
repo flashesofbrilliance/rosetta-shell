@@ -69,7 +69,17 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           if git diff --quiet; then
             echo "formula already current — nothing to do"
+            exit 0
+          fi
+          git commit -am "rosetta-shell ${VER}: bump formula url + sha256"
+          # The push needs HOMEBREW_TAP_TOKEN to carry Contents:write on the tap.
+          # If it doesn't, DON'T fail the release (npm already published) — surface
+          # a loud warning with the exact manual snippet instead.
+          if git push; then
+            echo "formula bumped + pushed to the tap"
           else
-            git commit -am "rosetta-shell ${VER}: bump formula url + sha256"
-            git push
+            echo "::warning title=Formula auto-bump failed::HOMEBREW_TAP_TOKEN lacks Contents:write on flashesofbrilliance/homebrew-tap. Run the manual bump below."
+            echo "----- manual formula bump -----"
+            echo "cd homebrew-tap && sed -i '' -E 's#^  url \".*\"#  url \"${URL}\"#;s#^  sha256 \".*\"#  sha256 \"${SHA}\"#' Formula/rosetta-shell.rb && git commit -am 'rosetta-shell ${VER}: bump formula' && git push"
+            echo "-------------------------------"
           fi
