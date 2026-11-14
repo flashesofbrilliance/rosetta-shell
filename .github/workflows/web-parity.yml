@@ -1,0 +1,24 @@
+name: web-parity
+
+# Rosetta Voice (web/rosetta-voice.html) carries its own copy of the lint
+# rules. This fails when that copy and `bin/rosetta lint` disagree by a byte.
+# Kept out of portability.yml on purpose: that file ships as a drop-in
+# template for other repos, and this check only makes sense here.
+
+on:
+  push:
+    paths: ["web/**", "bin/rosetta", "examples/**", "conformance/fixtures/**", ".github/workflows/web-parity.yml"]
+  pull_request:
+    paths: ["web/**", "bin/rosetta", "examples/**", "conformance/fixtures/**", ".github/workflows/web-parity.yml"]
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Web lint rules match bin/rosetta
+        run: node web/parity.test.js

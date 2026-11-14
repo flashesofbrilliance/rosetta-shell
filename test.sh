@@ -36,4 +36,14 @@ echo "# doctor runs"
 echo "  [PASS] doctor ran"
 
 echo
+echo "# web page lint rules match bin/rosetta (repo checkouts only; npm ships no web/)"
+if [ -f "$ROOT/web/parity.test.js" ]; then
+  command -v node >/dev/null 2>&1 || { echo "FAIL: node is required for web/parity.test.js" >&2; exit 1; }
+  node "$ROOT/web/parity.test.js" >/dev/null || { node "$ROOT/web/parity.test.js" >&2; echo "FAIL: web lint rules drifted from bin/rosetta" >&2; exit 1; }
+  echo "  [PASS] web parity"
+else
+  echo "  [SKIP] no web/ in this copy"
+fi
+
+echo
 echo "ALL SMOKE CHECKS PASSED"
