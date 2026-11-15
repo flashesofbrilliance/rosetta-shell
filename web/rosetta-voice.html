@@ -323,7 +323,14 @@ function render(res, isExample) {
 }
 
 // ---- Voice out: claude.ai tts, else speechSynthesis ----
-var tts = null, ttsTried = false;
+var tts = null, ttsTried = false, ttsUnlocked = false;
+// iOS only lets a page speak from inside a tap. Speak a silent phrase during the first tap so the
+// answer can be read aloud later, after recognition ends.
+function unlockSpeech() {
+  if (ttsUnlocked || !("speechSynthesis" in window)) return;
+  try { var u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch (e) {}
+  ttsUnlocked = true;
+}
 function speak(text) {
   if (!text) return;
   if (tts) { tts.speak(text).catch(function (e) { if (e && e.code === "not_granted") { tts = null; } }); return; }
@@ -356,7 +363,10 @@ function run(text, voice) {
 }
 
 var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+var NO_VOICE_LINE = "Voice isn't supported in this browser";
+var NO_VOICE_HINT = "Type below or tap a phrase. Voice input works in Safari and Google Chrome.";
 mic.addEventListener("click", function () {
+  unlockSpeech();
   if (dict) {
     if (listening) { dict.stop().catch(function () {}); return; }
     buffer = ""; listening = true;
@@ -377,15 +387,19 @@ mic.addEventListener("click", function () {
     rec.onresult = function (ev) {
       var fin = "", part = "";
       for (var i = 0; i < ev.results.length; i++) { if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; else part += ev.results[i][0].transcript; }
-      buffer = fin; document.getElementById("heard").textContent = fin + part;
+      // Keep everything heard, final or not: phones often end before marking text final, and what
+      // is shown in the gold strip must be exactly what gets translated.
+      buffer = (fin + part).trim(); document.getElementById("heard").textContent = buffer;
     };
     rec.onerror = function (ev) { listening = false; setState("idle", ev.error === "not-allowed" ? "Microphone is blocked" : "Listening failed", "Type below instead."); };
     rec.onend = function () { if (listening) finish(buffer); };
     try { rec.start(); } catch (e) { listening = false; setState("idle", "Could not start listening", "Type below instead."); }
     return;
   }
-  setState("idle", "Voice input is not available here", "Type below, or tap a phrase. In claude.ai, use Chrome or the desktop app.");
+  setState("idle", NO_VOICE_LINE, NO_VOICE_HINT);
 });
+// Say it before anyone taps. claude.ai's dictation, if it arrives later, restores the normal prompt.
+if (!SR) setState("idle", NO_VOICE_LINE, NO_VOICE_HINT);
 
 document.getElementById("speakBtn").addEventListener("click", function () { speak(lastSpeech); });
 document.getElementById("typeForm").addEventListener("submit", function (e) {
@@ -420,6 +434,7 @@ if (window.claude && window.claude.use) {
   window.claude.use("dictation").then(function (d) {
     if (!d) return;
     dict = d;
+    if (!SR) setState("idle", "Tap the mic and say a construct", "For example: \"how do I lowercase a variable\" or \"declare dash A\".");
     d.onPartial(function (p) { document.getElementById("heard").textContent = (buffer + " " + p.text).trim(); });
     d.onFinal(function (f) { buffer = (buffer + " " + f.text).trim(); document.getElementById("heard").textContent = buffer; });
     d.onState(function (s) {
