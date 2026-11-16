@@ -17,7 +17,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "sh test.sh"
+    "test": "sh test.sh",
+    "version": "sh scripts/readme-sync.sh && git add README.md"
   },
   "keywords": [
     "shell",

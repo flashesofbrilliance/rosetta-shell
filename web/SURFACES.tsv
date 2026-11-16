@@ -1,0 +1,2 @@
+# url<TAB>label<TAB>what it does. One row per live surface; scripts/readme-sync.sh renders these into README.md.
+https://rosetta-shell.arcs.care/voice	Rosetta Voice	say or type a shell construct and hear the portable fix, with what was heard shown word for word

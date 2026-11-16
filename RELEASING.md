@@ -24,6 +24,12 @@ npm version patch      # or minor / major — bumps package.json AND makes the g
 git push --follow-tags
 ```
 
+`npm version` also runs `scripts/readme-sync.sh` (the `version` script in
+package.json), so the README status block and its live-surface list land in
+the same tag commit. `test.sh` fails if that block is stale, so a release
+cannot ship docs that disagree with package.json. To add a live surface, add a
+row to `web/SURFACES.tsv`, never edit the block by hand.
+
 That's it. The `release` workflow fires on the `v*` tag and:
 1. verifies the tag matches `package.json`,
 2. `npm publish --provenance --access public`,
