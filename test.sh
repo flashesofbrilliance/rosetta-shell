@@ -46,4 +46,8 @@ else
 fi
 
 echo
+echo "# README status block matches package.json and web/SURFACES.tsv"
+sh "$ROOT/scripts/readme-sync.sh" --check
+
+echo
 echo "ALL SMOKE CHECKS PASSED"

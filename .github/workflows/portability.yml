@@ -44,3 +44,6 @@ jobs:
 
       - name: Self-conformance (the library is itself lossless here)
         run: bin/rosetta selftest
+
+      - name: README status block is current (scripts/readme-sync.sh --check)
+        run: sh scripts/readme-sync.sh --check
